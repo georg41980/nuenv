@@ -1,0 +1,72 @@
+name: Nuenv
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v3
+
+      - name: Check Nixpkgs input
+        uses: DeterminateSystems/flake-checker-action@main
+        with:
+          fail-mode: true
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix flake check
+
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-12]
+    runs-on: ${{ matrix.os }}
+    environment: build
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v3
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Set up Nix environment
+        run: |
+          nix develop ".#ci" --command direnv allow
+          eval "$(nix develop ".#ci" --command direnv export bash)"
+          echo "$PATH" >> $GITHUB_PATH
+
+      - name: Build Nuenv derivation
+        run: |
+          nix build --print-build-logs
+          cat result/share/hello.txt
+
+      - name: Build Nuenv derivation with no debug output
+        run: |
+          nix build --print-build-logs .#helloNoDebug
+          cat result/share/hello.txt
+
+      - name: Build Nuenv derivation directly (not from overlay)
+        run: |
+          nix build --print-build-logs .#direct
+          cat result/share/nushell-version.txt
+
+      - name: Build stdenv derivation that depends on Nuenv derivation
+        run: |
+          nix build --print-build-logs .#other
+          cat result/share/copied.txt
+
+      - name: Build Nuenv derivation that pulls sources from GitHub
+        run: |
+          nix build --print-build-logs .#githubSrc
+          cat result/share/README.md
+
+      - name: Build stdenv derivation that mimics Nuenv derivation
+        run: |
+          nix build --print-build-logs .#stdenv
+          cat result/share/hello.txt
